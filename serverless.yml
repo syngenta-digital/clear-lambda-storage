@@ -29,3 +29,10 @@ functions:
     timeout: 120
     events:
       - schedule: cron(0 12 ? * SUN *) # Run every sunday at 12:00pm UTC
+
+  calculate_lambda_storage:
+    handler: handler.calculate_total_lambda_size
+    memorySize: 128
+    timeout: 120
+    events:
+      - schedule: cron(0 20 ? * * *) # Run every day at 23:00pm UTC
