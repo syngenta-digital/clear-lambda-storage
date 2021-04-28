@@ -309,7 +309,7 @@ def main():
         ),
         metavar='dry-run'
     )
-    calculate_all_lambdas_size(parser.parse_args())
+    remove_old_lambda_versions(parser.parse_args())
 
 
 if __name__ == '__main__':

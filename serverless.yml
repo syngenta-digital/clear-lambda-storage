@@ -11,12 +11,14 @@ provider:
         - lambda:ListFunctions
         - lambda:ListVersionsByFunction
         - lambda:DeleteFunction
+        - cloudwatch:PutMetricData
       Resource: "*"
 
 package:
   exclude:
     - .git/**
-    - node_modules/**
+    - .travis.yaml
+    - CONTRIBUTING.rst
     - __pycache__/**
     - package-lock.json
     - package.json
