@@ -3,6 +3,7 @@ Removes old versions of Lambda functions.
 """
 from __future__ import print_function
 import argparse
+from argparse import Namespace
 import boto3
 try:
     import queue
@@ -10,7 +11,7 @@ except ImportError:
     import Queue as queue
 from boto3.session import Session
 from botocore.exceptions import ClientError
-
+from datetime import datetime
 
 LATEST = '$LATEST'
 
@@ -100,7 +101,7 @@ def lambda_version_generator(lambda_client, lambda_function):
             )
 
 
-def remove_old_lambda_versions(args):
+def remove_old_lambda_versions(args: Namespace):
     """
     Removes old versions of Lambda functions
     :param args: arguments
@@ -126,6 +127,7 @@ def remove_old_lambda_versions(args):
 
         for lambda_function in function_generator:
             # Verify if function name is provided and in case it is, skips all lambdas which name does not match
+
             if args.function_names and lambda_function['FunctionName'] not in args.function_names:
                 continue
 
@@ -145,7 +147,6 @@ def remove_old_lambda_versions(args):
                     total_deleted_functions.setdefault(version_to_delete['FunctionName'], 0)
                     total_deleted_functions[version_to_delete['FunctionName']] += 1
                     total_deleted_code_size += (version_to_delete['CodeSize'] / (1024 * 1024))
-
                     # DELETE OPERATION!
                     if args.dry_run:
                         print('Dry-Run: This process would delete function: {}'.format(version_to_delete["FunctionArn"]))
@@ -164,6 +165,77 @@ def remove_old_lambda_versions(args):
         len(total_deleted_functions.keys())
     ))
     print('Freed {} MBs'.format(int(total_deleted_code_size)))
+
+
+def calculate_all_lambdas_size(args: Namespace):
+    """
+    Removes old versions of Lambda functions
+    :param args: arguments
+    :return: None
+    """
+
+    regions = args.regions or list_available_lambda_regions()
+    total_code_size = 0
+    total_functions = {}
+    if args.function_names:
+        print('Will only count lambda versions for functions: {}'.format(" ,".join(args.function_names)))
+
+    for region in regions:
+        print('Scanning {} region'.format(region))
+
+        lambda_client = init_boto_client('lambda', region, args)
+        try:
+            function_generator = lambda_function_generator(lambda_client)
+        except Exception as exception:
+            print('Could not scan region: {}'.format(str(exception)))
+            continue
+
+        for lambda_function in function_generator:
+            # Verify if function name is provided and in case it is, skips all lambdas which name does not match
+
+            if args.function_names and lambda_function['FunctionName'] not in args.function_names:
+                continue
+
+            for version in lambda_version_generator(lambda_client, lambda_function):
+                print('Detected {} with version {}'.format(
+                    version['FunctionName'],
+                    version['Version'])
+                )
+                total_functions.setdefault(version['FunctionName'], 0)
+                total_functions[version['FunctionName']] += 1
+                total_code_size += (version['CodeSize'] / (1024 * 1024))
+
+    print('-' * 10)
+    print('Found {} versions from {} functions'.format(
+        sum(total_functions.values()),
+        len(total_functions.keys())
+    ))
+    print('Found {} MBs'.format(int(total_code_size)))
+
+    cloudwatch_client = init_boto_client('cloudwatch', "us-east-1", args)
+    cloudwatch_client.put_metric_data(Namespace="lambda/CodeStorage", MetricData=[
+        {
+            'MetricName': 'CodeStorageSize',
+            'Timestamp': datetime.now(),
+            'Value': int(total_code_size),
+            'Unit': 'Megabytes',
+            'StorageResolution': 60
+        },
+        {
+            'MetricName': 'FunctionVersionsCount',
+            'Timestamp': datetime.now(),
+            'Value': sum(total_functions.values()),
+            'Unit': 'None',
+            'StorageResolution': 60
+        },
+        {
+            'MetricName': 'IndividualFunctionsCount',
+            'Timestamp': datetime.now(),
+            'Value': len(total_functions.keys()),
+            'Unit': 'None',
+            'StorageResolution': 60
+        },
+    ])
 
 
 def main():
